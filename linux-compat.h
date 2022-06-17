@@ -32,6 +32,22 @@
 
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0) */
 
+#ifndef NLA_POLICY_RANGE
+#define NLA_POLICY_RANGE(x, y, z)      { .type = NLA_UNSPEC }
+#endif
+
+#ifndef NLA_POLICY_EXACT_LEN
+#define NLA_POLICY_EXACT_LEN(_len)     { .type = NLA_UNSPEC }
+#endif
+
+#ifndef NLA_POLICY_NESTED
+#define NLA_POLICY_NESTED(x)           { .type = NLA_NESTED }
+#endif
+
+#ifndef NLA_POLICY_MIN_LEN
+#define NLA_POLICY_MIN_LEN(x)          { .type = NLA_UNSPEC }
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0) && !defined(EL8)
 
 #define dev_get_tstats64 ip_tunnel_get_stats64
@@ -113,5 +129,65 @@ static inline void dev_sw_netstats_rx_add(struct net_device *dev, unsigned int l
 #define rt_gw4 rt_gateway
 
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+#define skb_probe_transport_header_(skb) skb_probe_transport_header(skb, 0)
+#else
+#define skb_probe_transport_header_ skb_probe_transport_header
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
+static inline void skb_mark_not_on_list(struct sk_buff *skb)
+{
+	skb->next = NULL;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0)
+static inline void *skb_put_data(struct sk_buff *skb, const void *data,
+				 unsigned int len)
+{
+	void *tmp = skb_put(skb, len);
+
+	memcpy(tmp, data, len);
+
+	return tmp;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
+#define timer_setup(timer, func, flags) \
+	setup_timer(timer, (void (*)(unsigned long))func, \
+		    (unsigned long)timer)
+#define from_timer(var, timer, field) \
+	container_of(timer, typeof(*var), field)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+static inline int __nlmsg_parse(const struct nlmsghdr *nlh, int hdrlen,
+				struct nlattr *tb[], int maxtype,
+				const struct nla_policy *policy)
+{
+	if (nlh->nlmsg_len < nlmsg_msg_size(hdrlen)) {
+		pr_err_ratelimited("Invalid header length");
+		return -EINVAL;
+	}
+
+	return nla_parse(tb, maxtype, nlmsg_attrdata(nlh, hdrlen),
+			   nlmsg_attrlen(nlh, hdrlen), policy);
+}
+
+static inline int nlmsg_parse_deprecated(const struct nlmsghdr *nlh, int hdrlen,
+					 struct nlattr *tb[], int maxtype,
+					 const struct nla_policy *policy,
+					 const void *ptr)
+{
+	return __nlmsg_parse(nlh, hdrlen, tb, maxtype, policy);
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+#define atomic64_fetch_add_unless atomic64_add_unless
+#endif
 
 #endif /* _NET_OVPN_DCO_LINUX_COMPAT_H_ */
