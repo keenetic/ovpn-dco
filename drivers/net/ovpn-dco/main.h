@@ -24,6 +24,8 @@
  */
 #define UDP_ENCAP_OVPNINUDP 100  /* transport layer */
 
+#include "../../../linux-compat.h"
+
 struct net_device;
 bool ovpn_dev_is_valid(const struct net_device *dev);
 

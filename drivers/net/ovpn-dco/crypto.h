@@ -13,7 +13,7 @@
 #include "main.h"
 #include "pktid.h"
 
-#include <uapi/linux/ovpn_dco.h>
+#include "../../../include/uapi/linux/ovpn_dco.h"
 #include <linux/skbuff.h>
 
 struct ovpn_peer;

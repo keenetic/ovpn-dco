@@ -12,7 +12,7 @@
 
 #include "peer.h"
 
-#include <uapi/linux/ovpn_dco.h>
+#include "../../../include/uapi/linux/ovpn_dco.h"
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 

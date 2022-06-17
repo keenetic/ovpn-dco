@@ -20,6 +20,8 @@
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 
+#include <net/ip6_route.h>
+
 static void ovpn_peer_ping(struct timer_list *t)
 {
 	struct ovpn_peer *peer = from_timer(peer, t, keepalive_xmit);

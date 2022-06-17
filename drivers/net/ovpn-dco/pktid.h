@@ -85,12 +85,15 @@ struct ovpn_pktid_recv {
 /* Get the next packet ID for xmit */
 static inline int ovpn_pktid_xmit_next(struct ovpn_pktid_xmit *pid, u32 *pktid)
 {
-	const s64 seq_num = atomic64_fetch_add_unless(&pid->seq_num, 1,
-						      0x100000000LL);
+	const s64 seq_num = atomic64_read(&pid->seq_num);
+
+	atomic64_inc(&pid->seq_num);
+	smp_mb__after_atomic();
+
 	/* when the 32bit space is over, we return an error because the packet ID is used to create
 	 * the cipher IV and we do not want to re-use the same value more than once
 	 */
-	if (unlikely(seq_num == 0x100000000LL))
+	if (unlikely(seq_num > 0x100000000LL))
 		return -ERANGE;
 
 	*pktid = (u32)seq_num;

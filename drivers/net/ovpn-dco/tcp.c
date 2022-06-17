@@ -196,7 +196,9 @@ static int ovpn_tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 			    int flags, int *addr_len)
 {
 	bool tmp = flags & MSG_DONTWAIT;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0)
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+#endif
 	int ret, chunk, copied = 0;
 	struct ovpn_socket *sock;
 	struct sk_buff *skb;
@@ -232,11 +234,19 @@ static int ovpn_tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 			goto unlock;
 		}
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0)
 		add_wait_queue(sk_sleep(sk), &wait);
+#endif
 		sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-		sk_wait_event(sk, &timeo, !ptr_ring_empty_bh(&sock->recv_ring), &wait);
+		sk_wait_event(sk, &timeo, !ptr_ring_empty_bh(&sock->recv_ring)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0)
+		, &wait
+#endif
+		);
 		sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 0)
 		remove_wait_queue(sk_sleep(sk), &wait);
+#endif
 
 		/* take care of signals */
 		if (signal_pending(current)) {

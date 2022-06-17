@@ -14,7 +14,7 @@
 #include "ovpnstruct.h"
 #include "udp.h"
 
-#include <uapi/linux/ovpn_dco.h>
+#include "../../../include/uapi/linux/ovpn_dco.h"
 
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
@@ -22,6 +22,7 @@
 #include <linux/socket.h>
 #include <linux/types.h>
 #include <linux/spinlock.h>
+#include <linux/file.h>
 #include <net/genetlink.h>
 #include <uapi/linux/in.h>
 #include <uapi/linux/in6.h>
@@ -178,7 +179,11 @@ static int ovpn_netlink_get_key_dir(struct genl_info *info, struct nlattr *key,
 	struct nlattr *attr, *attrs[OVPN_KEY_DIR_ATTR_MAX + 1];
 	int ret;
 
-	ret = nla_parse_nested(attrs, OVPN_KEY_DIR_ATTR_MAX, key, NULL, info->extack);
+	ret = nla_parse_nested(attrs, OVPN_KEY_DIR_ATTR_MAX, key, NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+	, info->extack
+#endif
+	);
 	if (ret)
 		return ret;
 
@@ -223,7 +228,11 @@ static int ovpn_netlink_new_key(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	ret = nla_parse_nested(attrs, OVPN_NEW_KEY_ATTR_MAX, info->attrs[OVPN_ATTR_NEW_KEY],
-			       NULL, info->extack);
+			       NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       , info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -285,8 +294,11 @@ static int ovpn_netlink_del_key(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[OVPN_ATTR_DEL_KEY])
 		return -EINVAL;
 
-	ret = nla_parse_nested(attrs, OVPN_DEL_KEY_ATTR_MAX, info->attrs[OVPN_ATTR_DEL_KEY], NULL,
-			       info->extack);
+	ret = nla_parse_nested(attrs, OVPN_DEL_KEY_ATTR_MAX, info->attrs[OVPN_ATTR_DEL_KEY], NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       ,info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -318,7 +330,11 @@ static int ovpn_netlink_swap_keys(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	ret = nla_parse_nested(attrs, OVPN_SWAP_KEYS_ATTR_MAX, info->attrs[OVPN_ATTR_SWAP_KEYS],
-			       NULL, info->extack);
+			       NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       , info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -354,8 +370,11 @@ static int ovpn_netlink_new_peer(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[OVPN_ATTR_NEW_PEER])
 		return -EINVAL;
 
-	ret = nla_parse_nested(attrs, OVPN_NEW_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_NEW_PEER], NULL,
-			       info->extack);
+	ret = nla_parse_nested(attrs, OVPN_NEW_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_NEW_PEER], NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       , info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -543,8 +562,11 @@ static int ovpn_netlink_set_peer(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[OVPN_ATTR_SET_PEER])
 		return -EINVAL;
 
-	ret = nla_parse_nested(attrs, OVPN_SET_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_SET_PEER], NULL,
-			       info->extack);
+	ret = nla_parse_nested(attrs, OVPN_SET_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_SET_PEER], NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       , info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -680,8 +702,11 @@ static int ovpn_netlink_get_peer(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[OVPN_ATTR_GET_PEER])
 		return -EINVAL;
 
-	ret = nla_parse_nested(attrs, OVPN_GET_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_GET_PEER], NULL,
-			       info->extack);
+	ret = nla_parse_nested(attrs, OVPN_GET_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_GET_PEER], NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       , info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -778,8 +803,11 @@ static int ovpn_netlink_del_peer(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[OVPN_ATTR_DEL_PEER])
 		return -EINVAL;
 
-	ret = nla_parse_nested(attrs, OVPN_DEL_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_DEL_PEER], NULL,
-			       info->extack);
+	ret = nla_parse_nested(attrs, OVPN_DEL_PEER_ATTR_MAX, info->attrs[OVPN_ATTR_DEL_PEER], NULL
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			       , info->extack
+#endif
+			       );
 	if (ret)
 		return ret;
 
@@ -843,7 +871,9 @@ static struct genl_family ovpn_netlink_family __ro_after_init = {
 	.name = OVPN_NL_NAME,
 	.version = 1,
 	.maxattr = OVPN_ATTR_MAX,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
 	.policy = ovpn_netlink_policy,
+#endif
 	.netnsok = true,
 	.pre_doit = ovpn_pre_doit,
 	.post_doit = ovpn_post_doit,

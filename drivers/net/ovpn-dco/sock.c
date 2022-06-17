@@ -17,6 +17,7 @@
 
 #include <net/udp.h>
 #include <net/udp_tunnel.h>
+#include <linux/file.h>
 
 /* Finalize release of socket, called after RCU grace period */
 static void ovpn_socket_detach(struct socket *sock)

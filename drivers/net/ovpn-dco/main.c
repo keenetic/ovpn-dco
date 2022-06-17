@@ -131,18 +131,25 @@ static void ovpn_setup(struct net_device *dev)
 				 NETIF_F_GSO_SOFTWARE | NETIF_F_HIGHDMA;
 
 	dev->ethtool_ops = &ovpn_ethtool_ops;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 9))
 	dev->needs_free_netdev = true;
+	dev->priv_destructor = ovpn_struct_free;
+#else
+	dev->destructor = ovpn_struct_free;
+#endif
 
 	dev->netdev_ops = &ovpn_netdev_ops;
-
-	dev->priv_destructor = ovpn_struct_free;
 
 	/* Point-to-Point TUN Device */
 	dev->hard_header_len = 0;
 	dev->addr_len = 0;
 	dev->mtu = ETH_DATA_LEN - overhead;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 9))
 	dev->min_mtu = IPV4_MIN_MTU;
 	dev->max_mtu = IP_MAX_MTU - overhead;
+#endif
 
 	/* Zero header length */
 	dev->type = ARPHRD_NONE;
@@ -162,7 +169,11 @@ static const struct nla_policy ovpn_policy[IFLA_OVPN_MAX + 1] = {
 };
 
 static int ovpn_newlink(struct net *src_net, struct net_device *dev, struct nlattr *tb[],
-			struct nlattr *data[], struct netlink_ext_ack *extack)
+			struct nlattr *data[]
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 2, 0)
+			, struct netlink_ext_ack *extack
+#endif
+			)
 {
 	struct ovpn_struct *ovpn = netdev_priv(dev);
 	int ret;
