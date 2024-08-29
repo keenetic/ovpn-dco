@@ -75,6 +75,7 @@ static const struct nla_policy ovpn_netlink_policy_new_peer[OVPN_NEW_PEER_ATTR_M
 	[OVPN_NEW_PEER_ATTR_IPV4] = { .type = NLA_U32 },
 	[OVPN_NEW_PEER_ATTR_IPV6] = NLA_POLICY_EXACT_LEN(sizeof(struct in6_addr)),
 	[OVPN_NEW_PEER_ATTR_LOCAL_IP] = NLA_POLICY_MAX_LEN(sizeof(struct in6_addr)),
+	[OVPN_NEW_PEER_ATTR_COMP_STUB] = { .type = NLA_U32 },
 };
 
 /** CMD_SET_PEER policy */
@@ -82,6 +83,7 @@ static const struct nla_policy ovpn_netlink_policy_set_peer[OVPN_SET_PEER_ATTR_M
 	[OVPN_SET_PEER_ATTR_PEER_ID] = { .type = NLA_U32 },
 	[OVPN_SET_PEER_ATTR_KEEPALIVE_INTERVAL] = { .type = NLA_U32 },
 	[OVPN_SET_PEER_ATTR_KEEPALIVE_TIMEOUT] = { .type = NLA_U32 },
+	[OVPN_SET_PEER_ATTR_COMP_STUB] = { .type = NLA_U32 },
 };
 
 /** CMD_DEL_PEER policy */
@@ -526,6 +528,9 @@ static int ovpn_netlink_new_peer(struct sk_buff *skb, struct genl_info *info)
 		       sizeof(struct in6_addr));
 	}
 
+	if (attrs[OVPN_NEW_PEER_ATTR_COMP_STUB])
+		peer->comp_stub = !!nla_get_u32(attrs[OVPN_NEW_PEER_ATTR_COMP_STUB]);
+
 	netdev_dbg(ovpn->dev,
 		   "%s: adding peer with endpoint=%pIScp/%s id=%u VPN-IPv4=%pI4 VPN-IPv6=%pI6c\n",
 		   __func__, ss, sock->sk->sk_prot_creator->name, peer->id,
@@ -589,6 +594,9 @@ static int ovpn_netlink_set_peer(struct sk_buff *skb, struct genl_info *info)
 
 	if (keepalive_set)
 		ovpn_peer_keepalive_set(peer, interv, timeout);
+
+	if (attrs[OVPN_SET_PEER_ATTR_COMP_STUB])
+		peer->comp_stub = !!nla_get_u32(attrs[OVPN_SET_PEER_ATTR_COMP_STUB]);
 
 	ovpn_peer_put(peer);
 	return 0;

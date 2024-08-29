@@ -93,6 +93,8 @@ struct ovpn_peer {
 	/* true if ovpn_peer_mark_delete was called */
 	bool halt;
 
+	bool comp_stub;
+
 	/* per-peer in-VPN rx/tx stats */
 	struct ovpn_peer_stats vpn_stats;
 

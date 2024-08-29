@@ -169,6 +169,13 @@ int ovpn_recv(struct ovpn_struct *ovpn, struct ovpn_peer *peer, struct sk_buff *
 	return 0;
 }
 
+#define LZO_COMPRESS_BYTE 0x66
+#define LZ4_COMPRESS_BYTE 0x69
+#define NO_COMPRESS_BYTE      0xFA
+#define NO_COMPRESS_BYTE_SWAP 0xFB /* to maintain payload alignment, replace this byte with last byte of packet */
+/* V2 on wire code */
+#define COMP_ALGV2_INDICATOR_BYTE       0x50
+
 static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 {
 	struct ovpn_peer *allowed_peer = NULL;
@@ -208,6 +215,35 @@ static int ovpn_decrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 
 	/* increment RX stats */
 	ovpn_peer_stats_increment_rx(&peer->vpn_stats, skb->len);
+
+	if (peer->comp_stub) {
+		/* check if null packet */
+		if (unlikely(!pskb_may_pull(skb, 1))) {
+			ret = -EINVAL;
+			goto drop;
+		}
+
+		if (skb->data[0] == NO_COMPRESS_BYTE)
+			__skb_pull(skb, 1);
+		else
+		if (skb->data[0] == NO_COMPRESS_BYTE_SWAP) {
+			u8 _end;
+			const u8 *endp = skb_header_pointer(skb, skb->len - 1, sizeof(_end), &_end);
+
+			if (unlikely(endp == NULL)) {
+				pr_err_ratelimited("%s: unable to obtain last byte of packet\n", __func__);
+				goto drop;
+			}
+
+			skb->data[0] = *endp;
+		} else
+		if (unlikely(skb->data[0] == LZO_COMPRESS_BYTE ||
+				skb->data[0] == LZ4_COMPRESS_BYTE ||
+				skb->data[0] == COMP_ALGV2_INDICATOR_BYTE)) {
+			pr_err("%s: compression %u is not supported\n", __func__, (unsigned)(skb->data[0]));
+			goto drop;
+		}
+	}
 
 	/* check if this is a valid datapacket that has to be delivered to the
 	 * tun interface
@@ -296,6 +332,16 @@ static bool ovpn_encrypt_one(struct ovpn_peer *peer, struct sk_buff *skb)
 		     skb_checksum_help(skb))) {
 		net_err_ratelimited("%s: cannot compute checksum for outgoing packet\n", __func__);
 		goto err;
+	}
+
+	if (unlikely(skb_headroom(skb) < 1)) {
+		pr_err("%s: no headroom available\n", __func__);
+		goto err;
+	}
+
+	if (peer->comp_stub) {
+		skb_push(skb, 1);
+		skb->data[0] = NO_COMPRESS_BYTE;
 	}
 
 	ovpn_peer_stats_increment_tx(&peer->vpn_stats, skb->len);
