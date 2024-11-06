@@ -42,7 +42,7 @@ static void ovpn_peer_expire(struct timer_list *t)
 static struct ovpn_peer *ovpn_peer_create(struct ovpn_struct *ovpn, u32 id)
 {
 	struct ovpn_peer *peer;
-	int ret;
+	int ret, cpu;
 
 	/* alloc and init peer object */
 	peer = kzalloc(sizeof(*peer), GFP_KERNEL);
@@ -63,13 +63,31 @@ static struct ovpn_peer *ovpn_peer_create(struct ovpn_struct *ovpn, u32 id)
 	ovpn_peer_stats_init(&peer->vpn_stats);
 	ovpn_peer_stats_init(&peer->link_stats);
 
-	INIT_WORK(&peer->encrypt_work, ovpn_encrypt_work);
-	INIT_WORK(&peer->decrypt_work, ovpn_decrypt_work);
+	peer->packet_encrypt_work = alloc_percpu(struct multicore_worker);
+
+	if (!peer->packet_encrypt_work) {
+		netdev_err(ovpn->dev, "%s: cannot allocate encrypt work\n", __func__);
+		goto err;
+	}
+
+	peer->packet_decrypt_work = alloc_percpu(struct multicore_worker);
+
+	if (!peer->packet_decrypt_work) {
+		netdev_err(ovpn->dev, "%s: cannot allocate decrypt work\n", __func__);
+		goto err_enc_work;
+	}
+
+	for_each_possible_cpu(cpu) {
+		per_cpu_ptr(peer->packet_encrypt_work, cpu)->ptr = peer;
+		per_cpu_ptr(peer->packet_decrypt_work, cpu)->ptr = peer;
+		INIT_WORK(&per_cpu_ptr(peer->packet_encrypt_work, cpu)->work, ovpn_encrypt_work);
+		INIT_WORK(&per_cpu_ptr(peer->packet_decrypt_work, cpu)->work, ovpn_decrypt_work);
+	}
 
 	ret = dst_cache_init(&peer->dst_cache, GFP_KERNEL);
 	if (ret < 0) {
 		netdev_err(ovpn->dev, "%s: cannot initialize dst cache\n", __func__);
-		goto err;
+		goto err_dec_work;
 	}
 
 	ret = ptr_ring_init(&peer->tx_ring, OVPN_QUEUE_LEN, GFP_KERNEL);
@@ -107,6 +125,10 @@ err_tx_ring:
 	ptr_ring_cleanup(&peer->tx_ring, NULL);
 err_dst_cache:
 	dst_cache_destroy(&peer->dst_cache);
+err_dec_work:
+	free_percpu(peer->packet_decrypt_work);
+err_enc_work:
+	free_percpu(peer->packet_encrypt_work);
 err:
 	kfree(peer);
 	return ERR_PTR(ret);
@@ -201,6 +223,9 @@ static void ovpn_peer_free(struct ovpn_peer *peer)
 {
 	ovpn_bind_reset(peer, NULL);
 	ovpn_peer_timer_delete_all(peer);
+
+	free_percpu(peer->packet_decrypt_work);
+	free_percpu(peer->packet_encrypt_work);
 
 	WARN_ON(!__ptr_ring_empty(&peer->tx_ring));
 	ptr_ring_cleanup(&peer->tx_ring, NULL);

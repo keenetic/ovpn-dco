@@ -19,6 +19,11 @@
 #include <linux/ptr_ring.h>
 #include <net/dst_cache.h>
 
+struct multicore_worker {
+	void *ptr;
+	struct work_struct work;
+};
+
 struct ovpn_peer {
 	struct ovpn_struct *ovpn;
 
@@ -37,8 +42,10 @@ struct ovpn_peer {
 	/* work objects to handle encryption/decryption of packets.
 	 * these works are queued on the ovpn->crypt_wq workqueue.
 	 */
-	struct work_struct encrypt_work;
-	struct work_struct decrypt_work;
+	struct multicore_worker __percpu *packet_encrypt_work;
+	struct multicore_worker __percpu *packet_decrypt_work;
+	int last_cpu_encrypt;
+	int last_cpu_decrypt;
 
 	struct ptr_ring tx_ring;
 	struct ptr_ring rx_ring;
@@ -150,6 +157,16 @@ static inline void ovpn_peer_keepalive_xmit_reset(struct ovpn_peer *peer)
 		return;
 
 	mod_timer(&peer->keepalive_xmit, jiffies + delta);
+}
+
+static inline int ovpn_peer_cpumask_next_online(int *next)
+{
+	int cpu = *next;
+
+	while (unlikely(!cpumask_test_cpu(cpu, cpu_online_mask)))
+		cpu = cpumask_next(cpu, cpu_online_mask) % nr_cpumask_bits;
+	*next = cpumask_next(cpu, cpu_online_mask) % nr_cpumask_bits;
+	return cpu;
 }
 
 struct ovpn_peer *ovpn_peer_new(struct ovpn_struct *ovpn, const struct sockaddr_storage *sa,

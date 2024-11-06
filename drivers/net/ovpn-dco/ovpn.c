@@ -160,10 +160,12 @@ int ovpn_napi_poll(struct napi_struct *napi, int budget)
  */
 int ovpn_recv(struct ovpn_struct *ovpn, struct ovpn_peer *peer, struct sk_buff *skb)
 {
+	const int cpu = ovpn_peer_cpumask_next_online(&peer->last_cpu_decrypt);
+
 	if (unlikely(ptr_ring_produce_bh(&peer->rx_ring, skb) < 0))
 		return -ENOSPC;
 
-	if (!queue_work(ovpn->crypto_wq, &peer->decrypt_work))
+	if (!queue_work_on(cpu, ovpn->crypto_wq, &per_cpu_ptr(peer->packet_decrypt_work, cpu)->work))
 		ovpn_peer_put(peer);
 
 	return 0;
@@ -295,10 +297,10 @@ drop:
 /* pick packet from RX queue, decrypt and forward it to the tun device */
 void ovpn_decrypt_work(struct work_struct *work)
 {
-	struct ovpn_peer *peer;
+	struct ovpn_peer *peer = container_of(work, struct multicore_worker,
+						 work)->ptr;
 	struct sk_buff *skb;
 
-	peer = container_of(work, struct ovpn_peer, decrypt_work);
 	while ((skb = ptr_ring_consume_bh(&peer->rx_ring))) {
 		if (likely(ovpn_decrypt_one(peer, skb) == 0)) {
 			/* if a packet has been enqueued for NAPI, signal
@@ -377,9 +379,9 @@ err:
 void ovpn_encrypt_work(struct work_struct *work)
 {
 	struct sk_buff *skb, *curr, *next;
-	struct ovpn_peer *peer;
+	struct ovpn_peer *peer = container_of(work, struct multicore_worker,
+						 work)->ptr;
 
-	peer = container_of(work, struct ovpn_peer, encrypt_work);
 	while ((skb = ptr_ring_consume_bh(&peer->tx_ring))) {
 		/* this might be a GSO-segmented skb list: process each skb
 		 * independently
@@ -428,7 +430,7 @@ void ovpn_encrypt_work(struct work_struct *work)
 /* Put skb into TX queue and schedule a consumer */
 static void ovpn_queue_skb(struct ovpn_struct *ovpn, struct sk_buff *skb, struct ovpn_peer *peer)
 {
-	int ret;
+	int ret, cpu;
 
 	if (likely(!peer))
 		peer = ovpn_peer_lookup_vpn_addr(ovpn, skb, false);
@@ -443,7 +445,9 @@ static void ovpn_queue_skb(struct ovpn_struct *ovpn, struct sk_buff *skb, struct
 		goto drop;
 	}
 
-	if (!queue_work(ovpn->crypto_wq, &peer->encrypt_work))
+	cpu = ovpn_peer_cpumask_next_online(&peer->last_cpu_encrypt);
+
+	if (!queue_work_on(cpu, ovpn->crypto_wq, &per_cpu_ptr(peer->packet_encrypt_work, cpu)->work))
 		ovpn_peer_put(peer);
 
 	return;
